@@ -20,10 +20,8 @@ unmanagedJars in Compile ++= (file(sourceAdempiere + "/packages") * "*.jar").cla
 unmanagedBase := baseDirectory.value / "lib"
 unmanagedClasspath in Compile += file(sourceAdempiere + "/bin")
 unmanagedClasspath in Compile += file(sourceAdempiere + "/zkwebui/WEB-INF/classes")
-unmanagedClasspath in Compile += file(sourceAdempiere + "/target/scala-2.11/classes")
-unmanagedClasspath in Compile += file(sourceAdempiere + "/target/scala-2.11/test-classes")
-
-//unmanagedJars in Compile += Attributed.blank(file(System.getenv("JAVA_HOME") + "/jre/lib/jfxrt.jar"))
+unmanagedClasspath in Compile += file(sourceAdempiere + "/target/scala-2.12/classes")
+unmanagedClasspath in Compile += file(sourceAdempiere + "/target/scala-2.12/test-classes")
 
 unmanagedJars in Compile ++= (file(sourceAdempiere + "/zkwebui/WEB-INF/lib") * "*.jar").classpath
 unmanagedJars in Compile ++= (file(sourceAdempiere + "/tools/lib") * "*.jar").classpath
