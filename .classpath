@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<classpath>
+	<classpathentry kind="src" path="base/src"/>
+	<classpathentry kind="src" path="client/src"/>
+	<classpathentry kind="src" path=""/>
+	<classpathentry kind="lib" path="/Users/e-Evolution/Desktop/Develop/ADempiere/adempiere/bin"/>
+	<classpathentry kind="lib" path="/Users/e-Evolution/Desktop/Develop/ADempiere/adempiere/tools/lib/groovy-all-2.0.1.jar"/>
+	<classpathentry kind="lib" path="/Users/e-Evolution/Desktop/Develop/ADempiere/adempiere/tools/lib/groovy-engine.jar"/>
+	<classpathentry kind="output" path="bin"/>
+</classpath>
