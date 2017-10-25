@@ -132,8 +132,8 @@ object JournalService extends BudgetMandatory {
               val invoicePosition = importJournal.getDescription.indexOf(", ")
               if (invoicePosition > 0) {
                 val invoiceDocumentNo = importJournal.getDescription.substring(invoicePosition + 2).trim
-                val searchInvoiceSQL = "SELECT MAX(i.C_Invoice_ID) FROM C_Invoice i WHERE i.DocumentNo = ?"
-                val invoiceId = DB.getSQLValueEx(importJournal.get_TrxName, searchInvoiceSQL, invoiceDocumentNo)
+                val searchInvoiceSQL = "SELECT MAX(i.C_Invoice_ID) FROM C_Invoice i WHERE i.DocumentNo = ? AND C_BPartner_ID=?"
+                val invoiceId = DB.getSQLValueEx(importJournal.get_TrxName, searchInvoiceSQL, invoiceDocumentNo , importJournal.getC_BPartner_ID.asInstanceOf[Integer])
                 if (invoiceId > 0)
                   journalLine.set_ValueOfColumn("C_Invoice_ID", invoiceId)
               }
