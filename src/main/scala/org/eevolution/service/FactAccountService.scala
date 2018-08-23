@@ -20,9 +20,10 @@ import java.math.BigDecimal
 import java.sql.Timestamp
 import java.util
 
-import org.compiere.acct.{Fact, FactLine}
+import org.compiere.acct.{Doc, Fact, FactLine}
 import org.compiere.model.{I_Fact_Acct, _}
 import org.compiere.util.DB
+import org.compiere.process.DocAction
 
 import scala.collection.JavaConversions._
 
@@ -77,12 +78,16 @@ object FactAccountService {
     * @return
     */
   def getBudgetCombinationId(document: PO, documentLineId: Int): Int = {
+    if (I_M_Requisition.Table_ID == document.get_Table_ID)
+      return DB.getSQLValue(document.get_TrxName, s"SELECT COALESCE(BudgetValidCombination_ID, C_ValidCombination_ID)  FROM M_RequisitionLine il WHERE il.M_Requisition_ID=${document.get_ID} AND il.M_RequisitionLine_ID=$documentLineId")
+    if (I_C_Order.Table_ID == document.get_Table_ID)
+      return DB.getSQLValue(document.get_TrxName, s"SELECT COALESCE(BudgetValidCombination_ID, C_ValidCombination_ID) FROM C_OrderLine il WHERE il.C_Order_ID=${document.get_ID} AND il.C_OrderLine_ID=$documentLineId")
     if (I_C_Invoice.Table_ID == document.get_Table_ID)
-      return DB.getSQLValue(document.get_TrxName, s"SELECT C_ValidCombination_ID FROM C_InvoiceLine il WHERE il.C_Invoice_ID=${document.get_ID} AND il.C_InvoiceLine_ID=$documentLineId")
+      return DB.getSQLValue(document.get_TrxName, s"SELECT COALESCE(BudgetValidCombination_ID, C_ValidCombination_ID) FROM C_InvoiceLine il WHERE il.C_Invoice_ID=${document.get_ID} AND il.C_InvoiceLine_ID=$documentLineId")
     if (I_GL_Journal.Table_ID == document.get_Table_ID)
-      return DB.getSQLValue(document.get_TrxName, s"SELECT BudgetValidCombination_ID FROM GL_JournalLine jl WHERE jl.GL_Journal_ID=${document.get_ID} AND jl.GL_JournalLine_ID=$documentLineId")
+      return DB.getSQLValue(document.get_TrxName, s"SELECT COALESCE(BudgetValidCombination_ID, C_ValidCombination_ID) FROM GL_JournalLine jl WHERE jl.GL_Journal_ID=${document.get_ID} AND jl.GL_JournalLine_ID=$documentLineId")
     if (I_C_BankStatement.Table_ID == document.get_Table_ID)
-      return DB.getSQLValue(document.get_TrxName, s"SELECT C_ValidCombination_ID FROM C_BankStatementLine bsl WHERE bsl.C_BankStatement_ID=${document.get_ID} AND bsl.C_BankStatementLine_ID=$documentLineId")
+      return DB.getSQLValue(document.get_TrxName, s"SELECT COALESCE(BudgetValidCombination_ID, C_ValidCombination_ID) FROM C_BankStatementLine bsl WHERE bsl.C_BankStatement_ID=${document.get_ID} AND bsl.C_BankStatementLine_ID=$documentLineId")
     return -1
   }
 
@@ -324,7 +329,7 @@ object FactAccountService {
           }
         })
 
-        // Based on Jorunal
+        // Based on Journal
         val accountJournalFacts: List[MFactAcct] = getAccountFactBasedOnInvoice(invoice, accountSchemaId, X_Fact_Acct.POSTINGTYPE_Budget, BudgetAccrual)
         accountJournalFacts.foreach(accountFact => {
           //Debit Exercised
@@ -335,6 +340,7 @@ object FactAccountService {
             val periodId = MPeriod.getC_Period_ID(allocation.getCtx, allocation.getDateAcct, allocation.getAD_Org_ID)
             val debitPaidFact = new MFactAcct(invoice.getCtx, 0, invoice.get_TrxName())
             PO.copyValues(accountFact, debitPaidFact)
+            debitPaidFact.setAD_Org_ID(accountFact.getAD_Org_ID)
             debitPaidFact.setDateAcct(allocation.getDateAcct)
             debitPaidFact.setC_Period_ID(periodId)
             debitPaidFact.setAD_Org_ID(invoice.getAD_Org_ID)
@@ -350,6 +356,7 @@ object FactAccountService {
             val optionExercisedAccount = getAccount(invoice, accountSchemaId, BudgetExercised)
             val creditAExercisedFact = new MFactAcct(invoice.getCtx, 0, invoice.get_TrxName())
             PO.copyValues(accountFact, creditAExercisedFact)
+            creditAExercisedFact.setAD_Org_ID(accountFact.getAD_Org_ID)
             creditAExercisedFact.setDateAcct(allocation.getDateAcct)
             creditAExercisedFact.setC_Period_ID(periodId)
             creditAExercisedFact.setAD_Org_ID(invoice.getAD_Org_ID)
@@ -366,6 +373,97 @@ object FactAccountService {
       })
     }
   }
+
+  /**
+    * Generate Budget Reserved accounting
+    * @param requisition
+    * @param accountSchema
+    * @param accountingFacts
+    */
+  def generateBudgetAccountReserved(requisition: Requisition, accountSchema: AccountSchema, accountingFacts: util.List[Fact]): Unit = {
+    val optionRecervedAccount = getAccount(requisition, accountSchema.get_ID, BudgetReserved)
+    val optionApprovalAccount = getAccount(requisition, accountSchema.get_ID, BudgetApproval)
+    accountingFacts.forEach(accountingFact => {
+      accountingFact.getLines
+        .foreach(factLine => {
+          val document = accountingFact.getDocument
+          val productCost = new ProductCost(requisition.getCtx, factLine.getM_Product_ID, 0, requisition.get_TrxName())
+          val expenseAcct = productCost.getAccount(ProductCost.ACCTTYPE_P_Expense, accountSchema)
+          val commitmentOffsetAcct = accountingFact.getDocument.getAccount(Doc.ACCTTYPE_CommitmentOffset, accountSchema)
+          if (Fact.POST_Reservation == factLine.getPostingType) {
+            if (factLine.getAccount.getAccount.get_ID() == expenseAcct.getAccount.get_ID) {
+              optionRecervedAccount.foreach(recervedAccount => {
+                factLine.setAccount_ID(recervedAccount.get_ID)
+                factLine.saveEx
+              })
+            }
+            if (factLine.getAccount.getAccount.get_ID == commitmentOffsetAcct.getAccount.get_ID) {
+              optionApprovalAccount.foreach(approvalAccount => {
+                //.deleteEx(true)
+                factLine.setAccount_ID(approvalAccount.get_ID)
+              })
+            }
+          }
+        })
+    })
+  }
+
+  /**
+    * Generate Budget Commitment Accounting
+    * @param order
+    * @param accountSchema
+    * @param accountingFacts
+    */
+  def generateBudgetAccountCommitment(order: Order, accountSchema: AccountSchema, accountingFacts: util.List[Fact]): Unit = {
+    val optionRecervedAccount = getAccount(order, accountSchema.get_ID, BudgetReserved)
+    val optionApprovalAccount = getAccount(order, accountSchema.get_ID, BudgetApproval)
+    accountingFacts.forEach(accountingFact => {
+      accountingFact.getLines
+        .foreach(factLine => {
+          val document = accountingFact.getDocument
+          val productCost = new ProductCost(order.getCtx, factLine.getM_Product_ID, 0, order.get_TrxName())
+          val expenseAcct = productCost.getAccount(ProductCost.ACCTTYPE_P_Expense, accountSchema)
+          val commitmentOffsetAcct = accountingFact.getDocument.getAccount(Doc.ACCTTYPE_CommitmentOffset, accountSchema)
+          if (Fact.POST_Reservation == factLine.getPostingType) {
+            if (factLine.getAccount.getAccount.get_ID() == expenseAcct.getAccount.get_ID) {
+              optionRecervedAccount.foreach(recervedAccount => {
+                factLine.setAccount_ID(recervedAccount.get_ID)
+                factLine.saveEx
+              })
+            }
+            if (factLine.getAccount.getAccount.get_ID == commitmentOffsetAcct.getAccount.get_ID()) {
+              optionApprovalAccount.foreach(approvalAccount => {
+                factLine.setAccount_ID(approvalAccount.get_ID)
+                factLine.saveEx
+              })
+            }
+          }
+          if (Fact.POST_Commitment == factLine.getPostingType) {
+            if (factLine.getAccount.getAccount.get_ID() == expenseAcct.getAccount.get_ID) {
+              optionRecervedAccount.foreach(recervedAccount => {
+                val accountBudgetToBeExercised = getAccount(order, accountSchema.getC_AcctSchema_ID, BudgetToBeExercised)
+                accountBudgetToBeExercised.foreach(budgetToBeExercised => {
+                  factLine.setAccount_ID(budgetToBeExercised.get_ID)
+                  factLine.setPostingType(Fact.POST_Budget)
+                  factLine.saveEx
+                })
+              })
+            }
+            if (factLine.getAccount.getAccount.get_ID == commitmentOffsetAcct.getAccount.get_ID()) {
+              optionApprovalAccount.foreach(approvalAccount => {
+                val accountBudgetCommittee = getAccount(order, accountSchema.getC_AcctSchema_ID, BudgetCommittee)
+                accountBudgetCommittee.foreach(budgetCommittee => {
+                  factLine.setAccount_ID(budgetCommittee.get_ID)
+                  factLine.setPostingType(Fact.POST_Budget)
+                  factLine.saveEx
+                })
+              })
+            }
+          }
+        })
+    })
+  }
+
 
   /**
     * Get Account
@@ -541,27 +639,73 @@ object FactAccountService {
           " WHERE ev.C_Element_ID=ae.C_Element_ID AND ae.ElementType='AC' AND ae.C_AcctSchema_ID=? " +
           " AND ev.IsActive='Y' AND ev.Value=?"
         val accountId = DB.getSQLValue(document.get_TrxName, sql, accountSchema.getC_AcctSchema_ID, BudgetToBeExercised)
+        // Requisition
+        if (I_M_Requisition.Table_Name == document.get_TableName) {
+          val requisition = document.asInstanceOf[MRequisition]
+          //Ignore Budget Valdiate  for Invoice reverse
+          if (DocAction.STATUS_Completed == requisition.getDocStatus) {
+            requisition.getLines.toList.filter(requisitionLine => requisitionLine != null).foreach(requisitionLine => {
+              val budgetKeyId = ValidCombinationService.getBudgetValidCombination(requisitionLine)
+              if (budgetKeyId > 0) {
+                val budgetKeyOption = Option(new MAccount(document.getCtx, budgetKeyId, document.get_TrxName()))
+                val budgetKey = budgetKeyOption.get
+                //Validate only Budget To Be Exercised
+                if (budgetKey.getAccount_ID == accountId) {
+                  val budgetValidationErrorList = validateBudgetKey(budgetKeyOption, requisition.getDocumentInfo, requisitionLine.getLine, requisitionLine.getLineNetAmt)
+                  if (budgetValidationErrorList.isEmpty) {
+
+                    budgetAmountList = budgetAmountList ++ List(budgetKey.getAlias -> requisitionLine.getLineNetAmt)
+                  }
+                  else
+                    budgetErrorMessagesList = budgetErrorMessagesList ++ budgetValidationErrorList
+                }
+              }
+            })
+          }
+        }
         // Invoice
-        if (document.get_TableName == I_C_Invoice.Table_Name) {
+        if (I_C_Order.Table_Name == document.get_TableName) {
+          val order = document.asInstanceOf[MOrder]
+          //Ignore Budget Valdiate  for Invoice reverse
+          if (DocAction.STATUS_Completed == order.getDocStatus) {
+            order.getLines.toList.filter(orderLine => orderLine != null).foreach(orderLine => {
+              val budgetKeyId = ValidCombinationService.getBudgetValidCombination(orderLine)
+              if (budgetKeyId > 0) {
+                val budgetKeyOption = Option(new MAccount(document.getCtx, budgetKeyId, document.get_TrxName()))
+                val budgetKey = budgetKeyOption.get
+                //Validate only Budget To Be Exercised
+                if (budgetKey.getAccount_ID == accountId) {
+                  val budgetValidationErrorList = validateBudgetKey(budgetKeyOption, order.getDocumentInfo, orderLine.getLine, orderLine.getLineNetAmt)
+                  if (budgetValidationErrorList.isEmpty) {
+
+                    budgetAmountList = budgetAmountList ++ List(budgetKey.getAlias -> orderLine.getLineNetAmt)
+                  }
+                  else
+                    budgetErrorMessagesList = budgetErrorMessagesList ++ budgetValidationErrorList
+                }
+              }
+            })
+          }
+        }
+        // Invoice
+        if (I_C_Invoice.Table_Name == document.get_TableName) {
           val invoice = document.asInstanceOf[MInvoice]
           //Ignore Budget Valdiate  for Invoice reverse
           if (!invoice.isReversal) {
             invoice.getLines.toList.filter(invoiceLine => invoiceLine != null).foreach(invoiceLine => {
-              if (invoiceLine.get_ColumnIndex(I_C_ValidCombination.COLUMNNAME_C_ValidCombination_ID) > 0) {
-                val budgetKeyId = invoiceLine.get_ValueAsInt(I_C_ValidCombination.COLUMNNAME_C_ValidCombination_ID)
-                if (budgetKeyId > 0) {
-                  val budgetKeyOption = Option(new MAccount(document.getCtx, budgetKeyId, document.get_TrxName()))
-                  val budgetKey = budgetKeyOption.get
-                  //Validate only Budget To Be Exercised
-                  if (budgetKey.getAccount_ID == accountId) {
-                    val budgetValidationErrorList = validateBudgetKey(budgetKeyOption, invoice.getDocumentInfo, invoiceLine.getLine, invoiceLine.getLineTotalAmt)
-                    if (budgetValidationErrorList.isEmpty) {
+              val budgetKeyId = ValidCombinationService.getBudgetValidCombination(invoiceLine)
+              if (budgetKeyId > 0) {
+                val budgetKeyOption = Option(new MAccount(document.getCtx, budgetKeyId, document.get_TrxName()))
+                val budgetKey = budgetKeyOption.get
+                //Validate only Budget To Be Exercised
+                if (budgetKey.getAccount_ID == accountId) {
+                  val budgetValidationErrorList = validateBudgetKey(budgetKeyOption, invoice.getDocumentInfo, invoiceLine.getLine, invoiceLine.getLineTotalAmt)
+                  if (budgetValidationErrorList.isEmpty) {
 
-                      budgetAmountList = budgetAmountList ++ List(budgetKey.getAlias -> invoiceLine.getLineTotalAmt)
-                    }
-                    else
-                      budgetErrorMessagesList = budgetErrorMessagesList ++ budgetValidationErrorList
+                    budgetAmountList = budgetAmountList ++ List(budgetKey.getAlias -> invoiceLine.getLineTotalAmt)
                   }
+                  else
+                    budgetErrorMessagesList = budgetErrorMessagesList ++ budgetValidationErrorList
                 }
               }
             })
@@ -575,8 +719,8 @@ object FactAccountService {
             /*if ((X_GL_Journal.POSTINGTYPE_Budget == journal.getPostingType && journalLine.get_ColumnIndex("BudgetValidCombination_ID") > 0 && journalLine.getAccount_ID == accountId)
             ||   X_GL_Journal.POSTINGTYPE_Actual == journal.getPostingType && journalLine.get_ColumnIndex("BudgetValidCombination_ID") > 0)*/
             //Validate Actual to Be Exercised
-            if (X_GL_Journal.POSTINGTYPE_Actual == journal.getPostingType && journalLine.get_ColumnIndex("BudgetValidCombination_ID") > 0) {
-              val budgetKeyId = journalLine.get_ValueAsInt("BudgetValidCombination_ID")
+            if (X_GL_Journal.POSTINGTYPE_Actual == journal.getPostingType && ValidCombinationService.existsBudgetValidCombination(journalLine)) {
+              val budgetKeyId = ValidCombinationService.getBudgetValidCombination(journalLine)
               if (budgetKeyId > 0 && journalLine.getAmtAcctDr.signum() > 0) {
                 val budgetKeyOption = Option(new MAccount(document.getCtx, budgetKeyId, document.get_TrxName()))
                 val budgetKey = budgetKeyOption.get
@@ -593,8 +737,9 @@ object FactAccountService {
               }
             }
             //Validate Budget To Be Exercised
-            if (X_GL_Journal.POSTINGTYPE_Budget == journal.getPostingType && journalLine.get_ColumnIndex("BudgetValidCombination_ID") > 0 && journalLine.getAccount_ID == accountId) {
-              val budgetKeyId = journalLine.get_ValueAsInt("BudgetValidCombination_ID")
+            if (X_GL_Journal.POSTINGTYPE_Budget == journal.getPostingType
+             && ValidCombinationService.existsBudgetValidCombination(journalLine) && journalLine.getAccount_ID == accountId) {
+              val budgetKeyId =  ValidCombinationService.getBudgetValidCombination(journalLine)
               if (budgetKeyId > 0 && journalLine.getAmtAcctCr.signum() > 0) {
                 val budgetKeyOption = Option(new MAccount(document.getCtx, budgetKeyId, document.get_TrxName()))
                 val budgetKey = budgetKeyOption.get
@@ -613,24 +758,22 @@ object FactAccountService {
           })
         }
         // Bank Statement
-        if (document.get_TableName == I_C_BankStatement.Table_Name) {
+        if (I_C_BankStatement.Table_Name == document.get_TableName) {
           val bankStatement = document.asInstanceOf[MBankStatement]
           bankStatement.getLines(true).toList.filter(bankStatementLine => bankStatementLine != null).foreach(bankStatementLine => {
-            if (bankStatementLine.get_ColumnIndex(I_C_ValidCombination.COLUMNNAME_C_ValidCombination_ID) > 0) {
-              val budgetKeyId = bankStatementLine.get_ValueAsInt(I_C_ValidCombination.COLUMNNAME_C_ValidCombination_ID)
-              if (budgetKeyId > 0) {
-                val budgetKeyOption = Option(new MAccount(document.getCtx, budgetKeyId, document.get_TrxName()))
-                val budgetKey = budgetKeyOption.get
-                //Validate only Budget To Be Exercised
-                if (budgetKey.getAccount_ID == accountId) {
-                  val budgetValidationErrorList = validateBudgetKey(budgetKeyOption, bankStatement.getDocumentInfo, bankStatementLine.getLine, bankStatementLine.getChargeAmt.negate())
-                  if (budgetValidationErrorList.isEmpty) {
+            val budgetKeyId = ValidCombinationService.getBudgetValidCombination(bankStatementLine)
+            if (budgetKeyId > 0) {
+              val budgetKeyOption = Option(new MAccount(document.getCtx, budgetKeyId, document.get_TrxName()))
+              val budgetKey = budgetKeyOption.get
+              //Validate only Budget To Be Exercised
+              if (budgetKey.getAccount_ID == accountId) {
+                val budgetValidationErrorList = validateBudgetKey(budgetKeyOption, bankStatement.getDocumentInfo, bankStatementLine.getLine, bankStatementLine.getChargeAmt.negate())
+                if (budgetValidationErrorList.isEmpty) {
 
-                    budgetAmountList = budgetAmountList ++ List(budgetKey.getAlias -> bankStatementLine.getChargeAmt.negate())
-                  }
-                  else
-                    budgetErrorMessagesList = budgetErrorMessagesList ++ budgetValidationErrorList
+                  budgetAmountList = budgetAmountList ++ List(budgetKey.getAlias -> bankStatementLine.getChargeAmt.negate())
                 }
+                else
+                  budgetErrorMessagesList = budgetErrorMessagesList ++ budgetValidationErrorList
               }
             }
           })

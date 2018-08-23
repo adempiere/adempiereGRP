@@ -26,6 +26,10 @@ package object service {
 
   type Tax = MTax
   type TaxAccount = X_C_Tax_Acct
+  type Requisition = MRequisition
+  type RequisitionLine = MRequisitionLine
+  type Order = MOrder
+  type OrderLine = MOrderLine
   type Invoice = MInvoice
   type Journal = MJournal
   type Allocation = MAllocationHdr
@@ -37,6 +41,8 @@ package object service {
   type ValidCombinaton = X_C_ValidCombination
 
   val BudgetToBeExercised = "822"
+  val BudgetApproval = "798008220"
+  val BudgetReserved = "798008240"
   val BudgetCommittee = "824"
   val BudgetAccrual = "825"
   val BudgetExercised = "826"

@@ -74,21 +74,57 @@ object ValidCombinationService extends BudgetMandatory {
     if (instance.get_ColumnIndex(I_C_ValidCombination.COLUMNNAME_UserElement2_ID) > 0
       && instance.get_ValueAsInt(I_C_ValidCombination.COLUMNNAME_UserElement2_ID) != account.getUserElement2_ID)
       instance.set_ValueOfColumn(I_C_ValidCombination.COLUMNNAME_UserElement2_ID, account.getUserElement2_ID)
+
+    val budgetValidCombinationId = getBudgetValidCombination(instance)
+    if (I_M_RequisitionLine.Table_ID == instance.get_Table_ID
+      && existsBudgetValidCombination(instance)
+      && budgetValidCombinationId != account.get_ID)
+      setBudgetValidCombination(instance,account.get_ID)
+    if (I_C_OrderLine.Table_ID == instance.get_Table_ID
+      && existsBudgetValidCombination(instance)
+      && budgetValidCombinationId != account.get_ID)
+      setBudgetValidCombination(instance,account.get_ID)
     if (I_C_InvoiceLine.Table_ID == instance.get_Table_ID
-      && instance.get_ColumnIndex(I_C_ValidCombination.COLUMNNAME_C_ValidCombination_ID) > 0
-      && instance.get_ValueAsInt(I_C_ValidCombination.COLUMNNAME_C_ValidCombination_ID) != account.get_ID) // todo : is necessary change the C_ValidCombination_ID for BudgetValidCombination_ID
-      instance.set_ValueOfColumn(I_C_ValidCombination.COLUMNNAME_C_ValidCombination_ID, account.get_ID)
+      && existsBudgetValidCombination(instance)
+      && budgetValidCombinationId != account.get_ID)
+      setBudgetValidCombination(instance,account.get_ID)
     if (I_GL_JournalLine.Table_ID == instance.get_Table_ID
-      && instance.get_ColumnIndex("BudgetValidCombination_ID") > 0
-      && instance.get_ValueAsInt("BudgetValidCombination_ID") != account.get_ID)
-      instance.set_ValueOfColumn("BudgetValidCombination_ID", account.get_ID)
+      && existsBudgetValidCombination(instance)
+      && budgetValidCombinationId != account.get_ID)
+      setBudgetValidCombination(instance,account.get_ID)
     if (I_C_BankStatementLine.Table_ID == instance.get_Table_ID
-      && instance.get_ColumnIndex(I_C_ValidCombination.COLUMNNAME_C_ValidCombination_ID) > 0
-      && instance.get_ValueAsInt(I_C_ValidCombination.COLUMNNAME_C_ValidCombination_ID) != account.get_ID) // todo : is necessary change the C_ValidCombination_ID for BudgetValidCombination_ID
-      instance.set_ValueOfColumn(I_C_ValidCombination.COLUMNNAME_C_ValidCombination_ID, account.get_ID)
-    if (instance.is_Changed())
-      instance.saveEx()
+      && existsBudgetValidCombination(instance)
+      && budgetValidCombinationId  != account.get_ID)
+      setBudgetValidCombination(instance,account.get_ID)
+    if (instance.is_Changed)
+      instance.saveEx
   }
+
+  def existsBudgetValidCombination(instance : PO) : Boolean = {
+    if (instance.get_ColumnIndex("BudgetValidCombination_ID") > 0 || instance.get_ColumnIndex("C_ValidCombination_ID") > 0)
+      return true
+    else
+      return false
+  }
+
+  def getBudgetValidCombination(instance : PO): Integer = {
+      if (existsBudgetValidCombination(instance))
+      {
+        if (instance.get_ColumnIndex("BudgetValidCombination_ID") > 0)
+          return instance.get_ValueAsInt("BudgetValidCombination_ID")
+        if (instance.get_ColumnIndex("C_ValidCombination_ID") > 0)
+          return instance.get_ValueAsInt("C_ValidCombination_ID")
+      }
+    return -1
+  }
+
+  def setBudgetValidCombination(instance : PO, accountId : Int): Unit = {
+      if (instance.get_ColumnIndex("BudgetValidCombination_ID") > 0)
+        instance.set_ValueOfColumn("BudgetValidCombination_ID", accountId)
+      if (instance.get_ColumnIndex("C_ValidCombination_ID") > 0)
+        instance.set_ValueOfColumn("BudgetValidCombination_ID", accountId)
+  }
+
 
   /**
     * Model Validator after new

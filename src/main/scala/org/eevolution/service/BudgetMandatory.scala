@@ -36,7 +36,7 @@ trait BudgetMandatory {
 
   def isMandatoryCampaign = true
 
-  def isMAndatoryProject = true
+  def isMandatoryProject = true
 
   def isMandatoryUserElement1 = true
 
@@ -59,8 +59,7 @@ trait BudgetMandatory {
     * @return
     */
   def checkMandatoryDimension(po: PO): String = {
-    val budgetColumnName = getBudgetValidCombinationColumn(po)
-    if (po.get_ColumnIndex(budgetColumnName) > 0 && po.get_ValueAsInt(budgetColumnName) > 0)
+    if (ValidCombinationService.getBudgetValidCombination(po) > 0)
       if (isMandatoryOrg && po.get_ValueAsInt(I_C_ValidCombination.COLUMNNAME_AD_Org_ID) <= 0)
         throw new AdempiereException("@AD_Org_ID@ @FillMandatory@")
     if (isMandatoryOrgTrx && po.get_ValueAsInt(I_C_ValidCombination.COLUMNNAME_AD_OrgTrx_ID) <= 0)
@@ -73,7 +72,7 @@ trait BudgetMandatory {
       throw new AdempiereException("@C_Activity_ID@ @FillMandatory@")
     if (isMandatoryCampaign && po.get_ValueAsInt(I_C_ValidCombination.COLUMNNAME_C_Campaign_ID) <= 0)
       throw new AdempiereException("@C_Campaign_ID@ @FillMandatory@")
-    if (isMAndatoryProject && po.get_ValueAsInt(I_C_ValidCombination.COLUMNNAME_C_Project_ID) <= 0)
+    if (isMandatoryProject && po.get_ValueAsInt(I_C_ValidCombination.COLUMNNAME_C_Project_ID) <= 0)
       throw new AdempiereException("@C_Project_ID@ @FillMandatory@")
     if (isMandatorySalesRegion && po.get_ValueAsInt(I_C_ValidCombination.COLUMNNAME_C_SalesRegion_ID) <= 0)
       throw new AdempiereException("@C_SalesRegion_ID@ @FillMandatory@")
@@ -90,24 +89,6 @@ trait BudgetMandatory {
     if (isMandatoryUser4 && po.get_ValueAsInt(I_C_ValidCombination.COLUMNNAME_User4_ID) <= 0)
       throw new AdempiereException("@User4_ID@ @FillMandatory@")
     withoutErrors
-  }
-
-  /**
-    * Get Budget Valid Combination Column for an Entity
-    *
-    * @param po
-    * @return
-    */
-  def getBudgetValidCombinationColumn(po: PO): String = {
-    if (I_C_ValidCombination.Table_ID == po.get_Table_ID())
-      return "C_ValidCombination_ID"
-    if (I_C_Invoice.Table_ID == po.get_Table_ID())
-      return "C_ValidCombination_ID"
-    if (I_GL_JournalLine.Table_ID == po.get_Table_ID())
-      return "BudgetValidCombination_ID"
-    if (I_C_BankStatement.Table_ID == po.get_Table_ID())
-      return "C_ValidCombination_ID"
-    return ""
   }
 }
 

@@ -47,6 +47,8 @@ class GRPAccountValidator extends ModelValidator with FactsValidator with Import
     engine.addModelChange(I_GL_JournalLine.Table_Name, this)
     engine.addModelChange(I_C_Invoice.Table_Name, this)
     engine.addModelChange(I_C_InvoiceLine.Table_Name, this)
+    engine.addModelChange(I_C_OrderLine.Table_Name, this)
+    engine.addModelChange(I_M_RequisitionLine.Table_Name, this)
 
     engine.addFactsValidate(I_M_Requisition.Table_Name, this)
     engine.addFactsValidate(I_C_Order.Table_Name, this)
@@ -66,7 +68,6 @@ class GRPAccountValidator extends ModelValidator with FactsValidator with Import
     engine.addImportValidate(I_I_GLJournal.Table_Name, this)
     engine.addImportValidate(I_I_Invoice.Table_Name, this)
     engine.addImportValidate(I_I_Budget.Table_Name, this)
-
   }
 
   /**
@@ -102,11 +103,19 @@ class GRPAccountValidator extends ModelValidator with FactsValidator with Import
     // Update Valid Combination Alias
     case _ if I_C_ValidCombination.Table_ID == po.get_Table_ID
       && ModelValidator.TYPE_AFTER_NEW == typeEvent => ValidCombinationService.afterNew(po)
+    case _ if I_M_RequisitionLine.Table_ID == po.get_Table_ID()
+      && ModelValidator.TYPE_AFTER_NEW == typeEvent => RequisitionService.afterNewRequisitionLine(po.asInstanceOf[MRequisitionLine])
+    case _ if I_M_RequisitionLine.Table_ID == po.get_Table_ID()
+      && ModelValidator.TYPE_BEFORE_CHANGE == typeEvent => RequisitionService.beforeChangeRequisitionLine(po.asInstanceOf[MRequisitionLine])
+    case _ if I_C_OrderLine.Table_ID == po.get_Table_ID()
+      && ModelValidator.TYPE_AFTER_NEW == typeEvent => OrderService.afterNewOrderLine(po.asInstanceOf[MOrderLine])
+    case _ if I_C_InvoiceLine.Table_ID == po.get_Table_ID()
+      && ModelValidator.TYPE_AFTER_NEW == typeEvent => InvoiceService.afterNewInvoiceLine(po.asInstanceOf[MInvoiceLine])
+    case _ if I_C_InvoiceLine.Table_ID == po.get_Table_ID()
+      && ModelValidator.TYPE_BEFORE_CHANGE == typeEvent => InvoiceService.beforeChangeInvoiceLine(po.asInstanceOf[MInvoiceLine])
     case _ if I_C_BankStatementLine.Table_ID == po.get_Table_ID
       && ModelValidator.CHANGETYPE_CHANGE == typeEvent
       && po.is_ValueChanged(I_C_BankStatementLine.COLUMNNAME_C_Invoice_ID) => BankStatementService.updateStatementLine(po)
-    case _ if I_C_InvoiceLine.Table_ID == po.get_Table_ID()
-      && ModelValidator.TYPE_AFTER_NEW == typeEvent => InvoiceService.afterNewInvoiceLine(po.asInstanceOf[MInvoiceLine])
     case _ if I_C_PaySelection.Table_ID == po.get_Table_ID
       && ModelValidator.TYPE_BEFORE_CHANGE == typeEvent => PaySelectionService.closed(po.asInstanceOf[MPaySelection])
       withoutErrors
@@ -125,7 +134,7 @@ class GRPAccountValidator extends ModelValidator with FactsValidator with Import
   def docValidate(po: PO, timing: Int): String = po match {
     // Validate Budget Available before compelte a document
     case _ if ModelValidator.TIMING_BEFORE_COMPLETE == timing => FactAccountService.checkBudgetAvailable(po)
-    // Vaidate reverse Payment
+    // Validate reverse Payment
     case _ if I_C_Payment.Table_ID == po.get_Table_ID
       && ModelValidator.TIMING_BEFORE_REVERSECORRECT == timing => PaymentService.validateReverse(po.asInstanceOf[MPayment])
     // Validate reverse invoice
@@ -156,11 +165,17 @@ class GRPAccountValidator extends ModelValidator with FactsValidator with Import
   def factsValidate(accountSchema: MAcctSchema, accountingFacts: util.List[Fact], po: PO): String = {
     // Fill Budget Dimension based on Budget Valid Combination
     FactAccountService.updateDimension(accountSchema, accountingFacts, po)
+    // Create Reserve
+    if (I_M_Requisition.Table_ID == po.get_Table_ID && accountingFacts != null && accountingFacts.size() > 0)
+      FactAccountService.generateBudgetAccountReserved(po.asInstanceOf[MRequisition] , accountSchema , accountingFacts)
+    // Create Commitment
+    if (I_C_Order.Table_ID == po.get_Table_ID && accountingFacts != null && accountingFacts.size() > 0)
+      FactAccountService.generateBudgetAccountCommitment(po.asInstanceOf[MOrder] , accountSchema , accountingFacts)
     // Move the account tax facts to expense account
-    if (I_C_Invoice.Table_ID == po.get_Table_ID() && accountingFacts != null && accountingFacts.size() > 0)
+    if (I_C_Invoice.Table_ID == po.get_Table_ID && accountingFacts != null && accountingFacts.size() > 0)
       FactAccountService.changeTaxAccount(accountSchema, accountingFacts, po.asInstanceOf[Invoice])
     // Generate the budget account Exercised and Paid based on Allocation
-    if (I_C_AllocationHdr.Table_ID == po.get_Table_ID() && accountingFacts != null && accountingFacts.size() > 0) {
+    if (I_C_AllocationHdr.Table_ID == po.get_Table_ID && accountingFacts != null && accountingFacts.size() > 0) {
       FactAccountService.generateBudgetAccountExercised(po.asInstanceOf[MAllocationHdr], accountSchema.get_ID())
       FactAccountService.generateBudgetAccountPaid(po.asInstanceOf[MAllocationHdr], accountSchema.get_ID())
     }

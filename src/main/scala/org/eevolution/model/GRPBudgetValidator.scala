@@ -18,6 +18,7 @@ package org.eevolution.model
 
 import org.compiere.model._
 import org.compiere.util.{CLogger, Env}
+import org.eevolution.service.ValidCombinationService
 
 import scala.collection.immutable.HashMap
 
@@ -56,9 +57,9 @@ class GRPBudgetValidator extends ModelValidator {
      val budgetElements = new HashMap[Int , BigDecimal]
       requisition
         .getLines
-        .filter(requisitionLine => Option(requisitionLine.get_ValueAsString(I_C_ValidCombination.COLUMNNAME_C_ValidCombination_ID)).isDefined)
+        .filter(requisitionLine => ValidCombinationService.existsBudgetValidCombination(requisition))
         .foreach(requisitionLine => {
-          val budgetKey = requisitionLine.get_ValueAsInt(I_C_ValidCombination.COLUMNNAME_C_ValidCombination_ID)
+          val budgetKey = ValidCombinationService..getBudgetValidCombination(requisitionLine)
           val budgetAmount = requisitionLine.getLineNetAmt
           budgetElements.updated(budgetKey, budgetElements.get(budgetKey).get + budgetAmount)
         })

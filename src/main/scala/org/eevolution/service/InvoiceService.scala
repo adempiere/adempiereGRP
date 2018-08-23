@@ -34,8 +34,42 @@ object InvoiceService {
     * @return
     */
   def afterNewInvoiceLine(invoiceLine: MInvoiceLine): String = {
-    val accountId = invoiceLine.get_ValueAsInt(I_C_ValidCombination.COLUMNNAME_C_ValidCombination_ID)
+    val orderLineOption = Option(invoiceLine.getC_OrderLine().asInstanceOf[MOrderLine])
+    orderLineOption.foreach(orderLine => {
+        val accountId = ValidCombinationService.getBudgetValidCombination(orderLine)
+        if (accountId > 0) {
+          ValidCombinationService.setBudgetValidCombination(invoiceLine, accountId)
+          ValidCombinationService.fillDimension(accountId, invoiceLine)(invoiceLine.getCtx, invoiceLine.get_TrxName())
+        }
+    })
+
+    val accountId = ValidCombinationService.getBudgetValidCombination(invoiceLine)
     if (accountId > 0) ValidCombinationService.fillDimension(accountId, invoiceLine)(invoiceLine.getCtx, invoiceLine.get_TrxName())
+
+    return withoutErrors
+  }
+
+  /**
+    * Validate Before Change Invoice Line
+    *
+    * @param invoiceLine
+    * @return
+    */
+  def beforeChangeInvoiceLine(invoiceLine: MInvoiceLine): String = {
+    /*val orderLineOption = Option(invoiceLine.getC_OrderLine().asInstanceOf[MOrderLine])
+    orderLineOption.foreach(orderLine => {
+      // todo remove legacy code
+      val accountId1 = orderLine.get_ValueAsInt("C_ValidCombination_ID")
+      if (accountId1 > 0) {
+        invoiceLine.set_ValueOfColumn("C_ValidCombination_ID", accountId1)
+        ValidCombinationService.fillDimension(accountId1, invoiceLine)(invoiceLine.getCtx, invoiceLine.get_TrxName())
+      }
+      val accountId2 = orderLine.get_ValueAsInt("BudgetValidCombination_ID")
+      if (accountId2 > 0) {
+        invoiceLine.set_ValueOfColumn("BudgetValidCombination_ID", accountId2)
+        ValidCombinationService.fillDimension(accountId2, invoiceLine)(invoiceLine.getCtx, invoiceLine.get_TrxName())
+      }
+    })*/
     return withoutErrors
   }
 
