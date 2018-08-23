@@ -59,7 +59,7 @@ class GRPBudgetValidator extends ModelValidator {
         .getLines
         .filter(requisitionLine => ValidCombinationService.existsBudgetValidCombination(requisition))
         .foreach(requisitionLine => {
-          val budgetKey = ValidCombinationService..getBudgetValidCombination(requisitionLine)
+          val budgetKey = ValidCombinationService.getBudgetValidCombination(requisitionLine)
           val budgetAmount = requisitionLine.getLineNetAmt
           budgetElements.updated(budgetKey, budgetElements.get(budgetKey).get + budgetAmount)
         })
