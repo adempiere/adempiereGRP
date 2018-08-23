@@ -188,6 +188,96 @@ object FactAccountService {
   }
 
   /**
+    * Generate Budget Reserved accounting
+    * @param requisition
+    * @param accountSchema
+    * @param accountingFacts
+    */
+  def generateBudgetAccountReserved(requisition: Requisition, accountSchema: AccountSchema, accountingFacts: util.List[Fact]): Unit = {
+    val optionRecervedAccount = getAccount(requisition, accountSchema.get_ID, BudgetReserved)
+    val optionApprovalAccount = getAccount(requisition, accountSchema.get_ID, BudgetApproval)
+    accountingFacts.forEach(accountingFact => {
+      accountingFact.getLines
+        .foreach(factLine => {
+          val document = accountingFact.getDocument
+          val productCost = new ProductCost(requisition.getCtx, factLine.getM_Product_ID, 0, requisition.get_TrxName())
+          val expenseAcct = productCost.getAccount(ProductCost.ACCTTYPE_P_Expense, accountSchema)
+          val commitmentOffsetAcct = accountingFact.getDocument.getAccount(Doc.ACCTTYPE_CommitmentOffset, accountSchema)
+          if (Fact.POST_Reservation == factLine.getPostingType) {
+            if (factLine.getAccount.getAccount.get_ID() == expenseAcct.getAccount.get_ID) {
+              optionRecervedAccount.foreach(recervedAccount => {
+                factLine.setAccount_ID(recervedAccount.get_ID)
+                factLine.saveEx
+              })
+            }
+            if (factLine.getAccount.getAccount.get_ID == commitmentOffsetAcct.getAccount.get_ID) {
+              optionApprovalAccount.foreach(approvalAccount => {
+                //.deleteEx(true)
+                factLine.setAccount_ID(approvalAccount.get_ID)
+              })
+            }
+          }
+        })
+    })
+  }
+
+  /**
+    * Generate Budget Commitment Accounting
+    * @param order
+    * @param accountSchema
+    * @param accountingFacts
+    */
+  def generateBudgetAccountCommitment(order: Order, accountSchema: AccountSchema, accountingFacts: util.List[Fact]): Unit = {
+    val optionRecervedAccount = getAccount(order, accountSchema.get_ID, BudgetReserved)
+    val optionApprovalAccount = getAccount(order, accountSchema.get_ID, BudgetApproval)
+    accountingFacts.forEach(accountingFact => {
+      accountingFact.getLines
+        .foreach(factLine => {
+          val document = accountingFact.getDocument
+          val productCost = new ProductCost(order.getCtx, factLine.getM_Product_ID, 0, order.get_TrxName())
+          val expenseAcct = productCost.getAccount(ProductCost.ACCTTYPE_P_Expense, accountSchema)
+          val commitmentOffsetAcct = accountingFact.getDocument.getAccount(Doc.ACCTTYPE_CommitmentOffset, accountSchema)
+          if (Fact.POST_Reservation == factLine.getPostingType) {
+            if (factLine.getAccount.getAccount.get_ID() == expenseAcct.getAccount.get_ID) {
+              optionRecervedAccount.foreach(recervedAccount => {
+                factLine.setAccount_ID(recervedAccount.get_ID)
+                factLine.saveEx
+              })
+            }
+            if (factLine.getAccount.getAccount.get_ID == commitmentOffsetAcct.getAccount.get_ID()) {
+              optionApprovalAccount.foreach(approvalAccount => {
+                factLine.setAccount_ID(approvalAccount.get_ID)
+                factLine.saveEx
+              })
+            }
+          }
+          if (Fact.POST_Commitment == factLine.getPostingType) {
+            if (factLine.getAccount.getAccount.get_ID() == expenseAcct.getAccount.get_ID) {
+              optionRecervedAccount.foreach(recervedAccount => {
+                val accountBudgetToBeExercised = getAccount(order, accountSchema.getC_AcctSchema_ID, BudgetToBeExercised)
+                accountBudgetToBeExercised.foreach(budgetToBeExercised => {
+                  factLine.setAccount_ID(budgetToBeExercised.get_ID)
+                  factLine.setPostingType(Fact.POST_Budget)
+                  factLine.saveEx
+                })
+              })
+            }
+            if (factLine.getAccount.getAccount.get_ID == commitmentOffsetAcct.getAccount.get_ID()) {
+              optionApprovalAccount.foreach(approvalAccount => {
+                val accountBudgetCommittee = getAccount(order, accountSchema.getC_AcctSchema_ID, BudgetCommittee)
+                accountBudgetCommittee.foreach(budgetCommittee => {
+                  factLine.setAccount_ID(budgetCommittee.get_ID)
+                  factLine.setPostingType(Fact.POST_Budget)
+                  factLine.saveEx
+                })
+              })
+            }
+          }
+        })
+    })
+  }
+
+  /**
     * Generate Budget Account Exercised
     *
     * @param allocation
@@ -373,97 +463,6 @@ object FactAccountService {
       })
     }
   }
-
-  /**
-    * Generate Budget Reserved accounting
-    * @param requisition
-    * @param accountSchema
-    * @param accountingFacts
-    */
-  def generateBudgetAccountReserved(requisition: Requisition, accountSchema: AccountSchema, accountingFacts: util.List[Fact]): Unit = {
-    val optionRecervedAccount = getAccount(requisition, accountSchema.get_ID, BudgetReserved)
-    val optionApprovalAccount = getAccount(requisition, accountSchema.get_ID, BudgetApproval)
-    accountingFacts.forEach(accountingFact => {
-      accountingFact.getLines
-        .foreach(factLine => {
-          val document = accountingFact.getDocument
-          val productCost = new ProductCost(requisition.getCtx, factLine.getM_Product_ID, 0, requisition.get_TrxName())
-          val expenseAcct = productCost.getAccount(ProductCost.ACCTTYPE_P_Expense, accountSchema)
-          val commitmentOffsetAcct = accountingFact.getDocument.getAccount(Doc.ACCTTYPE_CommitmentOffset, accountSchema)
-          if (Fact.POST_Reservation == factLine.getPostingType) {
-            if (factLine.getAccount.getAccount.get_ID() == expenseAcct.getAccount.get_ID) {
-              optionRecervedAccount.foreach(recervedAccount => {
-                factLine.setAccount_ID(recervedAccount.get_ID)
-                factLine.saveEx
-              })
-            }
-            if (factLine.getAccount.getAccount.get_ID == commitmentOffsetAcct.getAccount.get_ID) {
-              optionApprovalAccount.foreach(approvalAccount => {
-                //.deleteEx(true)
-                factLine.setAccount_ID(approvalAccount.get_ID)
-              })
-            }
-          }
-        })
-    })
-  }
-
-  /**
-    * Generate Budget Commitment Accounting
-    * @param order
-    * @param accountSchema
-    * @param accountingFacts
-    */
-  def generateBudgetAccountCommitment(order: Order, accountSchema: AccountSchema, accountingFacts: util.List[Fact]): Unit = {
-    val optionRecervedAccount = getAccount(order, accountSchema.get_ID, BudgetReserved)
-    val optionApprovalAccount = getAccount(order, accountSchema.get_ID, BudgetApproval)
-    accountingFacts.forEach(accountingFact => {
-      accountingFact.getLines
-        .foreach(factLine => {
-          val document = accountingFact.getDocument
-          val productCost = new ProductCost(order.getCtx, factLine.getM_Product_ID, 0, order.get_TrxName())
-          val expenseAcct = productCost.getAccount(ProductCost.ACCTTYPE_P_Expense, accountSchema)
-          val commitmentOffsetAcct = accountingFact.getDocument.getAccount(Doc.ACCTTYPE_CommitmentOffset, accountSchema)
-          if (Fact.POST_Reservation == factLine.getPostingType) {
-            if (factLine.getAccount.getAccount.get_ID() == expenseAcct.getAccount.get_ID) {
-              optionRecervedAccount.foreach(recervedAccount => {
-                factLine.setAccount_ID(recervedAccount.get_ID)
-                factLine.saveEx
-              })
-            }
-            if (factLine.getAccount.getAccount.get_ID == commitmentOffsetAcct.getAccount.get_ID()) {
-              optionApprovalAccount.foreach(approvalAccount => {
-                factLine.setAccount_ID(approvalAccount.get_ID)
-                factLine.saveEx
-              })
-            }
-          }
-          if (Fact.POST_Commitment == factLine.getPostingType) {
-            if (factLine.getAccount.getAccount.get_ID() == expenseAcct.getAccount.get_ID) {
-              optionRecervedAccount.foreach(recervedAccount => {
-                val accountBudgetToBeExercised = getAccount(order, accountSchema.getC_AcctSchema_ID, BudgetToBeExercised)
-                accountBudgetToBeExercised.foreach(budgetToBeExercised => {
-                  factLine.setAccount_ID(budgetToBeExercised.get_ID)
-                  factLine.setPostingType(Fact.POST_Budget)
-                  factLine.saveEx
-                })
-              })
-            }
-            if (factLine.getAccount.getAccount.get_ID == commitmentOffsetAcct.getAccount.get_ID()) {
-              optionApprovalAccount.foreach(approvalAccount => {
-                val accountBudgetCommittee = getAccount(order, accountSchema.getC_AcctSchema_ID, BudgetCommittee)
-                accountBudgetCommittee.foreach(budgetCommittee => {
-                  factLine.setAccount_ID(budgetCommittee.get_ID)
-                  factLine.setPostingType(Fact.POST_Budget)
-                  factLine.saveEx
-                })
-              })
-            }
-          }
-        })
-    })
-  }
-
 
   /**
     * Get Account
